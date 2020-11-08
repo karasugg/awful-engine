@@ -15,35 +15,28 @@
 #include "DemoApplication.h"
 
 int main() {
+	MainDemo();
 
-    MainDemo();
+	//glfwInit();
 
+	//glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	//GLFWwindow* window = glfwCreateWindow(1600, 900, "awful-engine.exe", nullptr, nullptr);
 
+	//uint32_t extensionCount = 0;
+	//vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
 
-    //glfwInit();
+	//std::cout << extensionCount << " extensions supported\n";
 
-    //glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    //GLFWwindow* window = glfwCreateWindow(1600, 900, "awful-engine.exe", nullptr, nullptr);
+	//glm::mat4 matrix;
+	//glm::vec4 vec;
+	//auto test = matrix * vec;
 
-    //uint32_t extensionCount = 0;
-    //vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+	//while(!glfwWindowShouldClose(window)) {
+	//    glfwPollEvents();
+	//}
 
-    //std::cout << extensionCount << " extensions supported\n";
+	//glfwDestroyWindow(window);
+	//glfwTerminate();
 
-    //glm::mat4 matrix;
-    //glm::vec4 vec;
-    //auto test = matrix * vec;
-
-    //while(!glfwWindowShouldClose(window)) {
-    //    glfwPollEvents();
-    //}
-
-    //glfwDestroyWindow(window);
-    //glfwTerminate();
-
-
-
-
-
-    return 0;
+	return 0;
 }
