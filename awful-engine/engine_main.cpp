@@ -12,29 +12,38 @@
 #include <glm/mat4x4.hpp>
 
 #include <iostream>
+#include "DemoApplication.h"
 
 int main() {
-    glfwInit();
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Vulkan window", nullptr, nullptr);
+    MainDemo();
 
-    uint32_t extensionCount = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
 
-    std::cout << extensionCount << " extensions supported\n";
 
-    glm::mat4 matrix;
-    glm::vec4 vec;
-    auto test = matrix * vec;
+    //glfwInit();
 
-    while(!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
-    }
+    //glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    //GLFWwindow* window = glfwCreateWindow(1600, 900, "awful-engine.exe", nullptr, nullptr);
 
-    glfwDestroyWindow(window);
+    //uint32_t extensionCount = 0;
+    //vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
 
-    glfwTerminate();
+    //std::cout << extensionCount << " extensions supported\n";
+
+    //glm::mat4 matrix;
+    //glm::vec4 vec;
+    //auto test = matrix * vec;
+
+    //while(!glfwWindowShouldClose(window)) {
+    //    glfwPollEvents();
+    //}
+
+    //glfwDestroyWindow(window);
+    //glfwTerminate();
+
+
+
+
 
     return 0;
 }
