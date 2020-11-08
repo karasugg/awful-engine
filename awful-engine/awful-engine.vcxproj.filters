@@ -23,7 +23,7 @@
     <ClInclude Include="DemoApplication.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="InitCfg.h">
+    <ClInclude Include="gamecfg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
