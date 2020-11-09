@@ -47,6 +47,14 @@ private:
 			return graphicsFamily.has_value() && presentFamily.has_value();
 		}
 	};
+	struct SwapChainSupportDetails {
+		VkSurfaceCapabilitiesKHR capabilities;
+		std::vector<VkSurfaceFormatKHR> formats;
+		std::vector<VkPresentModeKHR> presentModes;
+		bool isAdequate() {
+			return !formats.empty() && !presentModes.empty();
+		}
+	};
 #pragma endregion
 
 #pragma region Methods
@@ -63,8 +71,30 @@ private:
 		CreateInstance();
 		SetupDebugMessenger();
 		CreateSurface();
+
 		PickPhysicalDevice();
 		CreateLogicalDevice();
+	}
+
+	SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device) {
+		std::cout << "Querying swap chain support..." << std::endl;
+
+		SwapChainSupportDetails details;
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, _surface, &details.capabilities);
+		uint32_t formatCount;
+		vkGetPhysicalDeviceSurfaceFormatsKHR(device, _surface, &formatCount, nullptr);
+		if(formatCount != 0) {
+			details.formats.resize(formatCount);
+			vkGetPhysicalDeviceSurfaceFormatsKHR(device, _surface, &formatCount, details.formats.data());
+		}
+		uint32_t presentModeCount;
+		vkGetPhysicalDeviceSurfacePresentModesKHR(device, _surface, &presentModeCount, nullptr);
+		if(presentModeCount != 0) {
+			details.presentModes.resize(presentModeCount);
+			vkGetPhysicalDeviceSurfacePresentModesKHR(device, _surface, &presentModeCount, details.presentModes.data());
+		}
+		std::cout << "Querying swap chain support done." << std::endl;
+		return details;
 	}
 
 	void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
@@ -151,7 +181,7 @@ private:
 		// Check if device is suitable for Vulkan
 		for(const auto& device : devices) {
 			if(IsDeviceSuitable(device)) {
-				std::cout << "device is suitable!" << std::endl;
+				std::cout << "Device is suitable!" << std::endl;
 				_physicalDevice = device;
 				break;
 			}
@@ -162,10 +192,17 @@ private:
 	bool IsDeviceSuitable(VkPhysicalDevice device) {
 		QueueFamilyIndices indices = FindQueueFamilies(device);
 		bool extensionsSupported = CheckDeviceExtensionSupport(device);
-		return indices.isComplete() && extensionsSupported;
+		bool swapChainAdequate = false;
+		if(extensionsSupported) {
+			SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(device);
+			swapChainAdequate = swapChainSupport.isAdequate();
+		}
+		return indices.isComplete() && extensionsSupported && swapChainAdequate;
 	}
 
+	// Checks if all enabled configurations are supported in GPU
 	bool CheckDeviceExtensionSupport(VkPhysicalDevice device) {
+		std::cout << "Checking device extension support..." << std::endl;
 		uint32_t extensionCount;
 		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
 
@@ -178,9 +215,8 @@ private:
 			requiredExtensions.erase(extension.extensionName);
 		}
 
+		std::cout << "Checking device extension support done." << std::endl;
 		return requiredExtensions.empty();
-
-		return true;
 	}
 
 	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device) {
