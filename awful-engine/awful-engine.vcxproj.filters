@@ -26,5 +26,14 @@
     <ClInclude Include="gamecfg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="cfg\game.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="models\primitives\2d.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="models\primitives\3d.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

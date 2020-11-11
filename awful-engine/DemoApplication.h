@@ -4,7 +4,6 @@
 #include <GLFW/glfw3.h>
 #endif // GLFW_INCLUDE_VULKAN
 
-#include "gamecfg.h";
 #include <iostream>
 #include <stdexcept>
 #include <cstdlib>
@@ -14,6 +13,11 @@
 #include <set>
 #include <cstdint>
 #include <algorithm>
+#include <fstream>
+
+#include "cfg/game.h";
+#include "models/primitives/2d.h"
+#include "models/primitives/3d.h"
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
@@ -76,6 +80,66 @@ private:
 		PickPhysicalDevice();
 		CreateLogicalDevice();
 		CreateSwapChain();
+		CreateImageViews();
+		CreateGraphicsPipeline();
+	}
+
+	static std::vector<char> ReadFile(const std::string& filename) {
+		std::cout << "Reading file" << filename << std::endl;
+
+		std::ifstream file(filename, std::ios::ate | std::ios::binary);
+		if(!file.is_open()) {
+			throw std::runtime_error("failed to open file!");
+		}
+		// Read file size by reading the last character position in the file.
+		// std::ios::ate = at the end
+		size_t fileSize = (size_t)file.tellg();
+		std::vector<char> buffer(fileSize);
+
+		// Go back to beginning and read all the data
+		file.seekg(0);
+		file.read(buffer.data(), fileSize);
+
+		file.close();
+
+		return buffer;
+	}
+
+	void CreateGraphicsPipeline() {
+		auto vertShaderCode = ReadFile("shaders/vert.spv"); // read vertex code
+		auto fragShaderCode = ReadFile("shaders/frag.spv"); // read fragment code
+		std::cout << "SHADER: Vertex size: " << vertShaderCode.size() << " Fragment size: " << fragShaderCode.size() << std::endl;
+
+		if(vertShaderCode.size() == 0 || fragShaderCode.size() == 0)
+			throw std::runtime_error("Failed to load specified shaders");
+
+		std::cout << "Create graphics pipeline done!" << std::endl;
+	}
+
+	void CreateImageViews() {
+		_swapChainImageViews.resize(_swapChainImages.size());
+
+		for(size_t i = 0; i < _swapChainImages.size(); i++) {
+			VkImageViewCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			createInfo.image = _swapChainImages[i];
+			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D; // Allows 1d, 2d, 3d and cube-maps
+			createInfo.format = _swapChainImageFormat;
+			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			createInfo.subresourceRange.baseMipLevel = 0;
+			createInfo.subresourceRange.levelCount = 1;
+			createInfo.subresourceRange.baseArrayLayer = 0;
+			createInfo.subresourceRange.layerCount = 1;
+
+			if(vkCreateImageView(_logicalDevice, &createInfo, nullptr, &_swapChainImageViews[i]) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to create image views!");
+			}
+		}
+		std::cout << "Create image view done!" << std::endl;
 	}
 
 	SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device) {
@@ -120,6 +184,7 @@ private:
 		if(glfwCreateWindowSurface(_instance, _window, nullptr, &_surface) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to create window surface!");
 		}
+		std::cout << "Create surface done!" << std::endl;
 	}
 
 	void CreateLogicalDevice() {
@@ -167,6 +232,7 @@ private:
 
 		vkGetDeviceQueue(_logicalDevice, indices.graphicsFamily.value(), 0, &_graphicsQueue);
 		vkGetDeviceQueue(_logicalDevice, indices.presentFamily.value(), 0, &_presentQueue);
+		std::cout << "Create logical device done!" << std::endl;
 	}
 
 	void PickPhysicalDevice() {
@@ -208,6 +274,8 @@ private:
 				return availableFormat;
 			}
 		}
+		std::cout << "Choose swap surface format done!" << std::endl;
+
 		return availableFormats[0];
 	}
 
@@ -218,9 +286,11 @@ private:
 				return availablePresentMode;
 			}
 		}
+		std::cout << "Choose swap present mode done!" << std::endl;
+
 		return VK_PRESENT_MODE_FIFO_KHR;
 	}
-
+	// Extent stands basically for the resolution of the image
 	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
 		if(capabilities.currentExtent.width != UINT32_MAX) {
 			return capabilities.currentExtent;
@@ -235,6 +305,7 @@ private:
 			// Scale to screen DPI
 			actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
 			actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
+			std::cout << "Choose swap extent done!" << std::endl;
 
 			return actualExtent;
 		}
@@ -298,6 +369,7 @@ private:
 
 		_swapChainImageFormat = surfaceFormat.format;
 		_swapChainExtent = extent;
+		std::cout << "Create swap chain done!" << std::endl;
 	}
 
 	// Checks if all enabled configurations are supported in GPU
@@ -427,6 +499,7 @@ private:
 			throw std::runtime_error("Validation layers requested, but not available!");
 		} else
 			std::cout << "Validation layers available!" << std::endl;
+		std::cout << "Create instance done!" << std::endl;
 	}
 
 	bool CheckValidationLayerSupport() {
@@ -450,6 +523,7 @@ private:
 				return false;
 			}
 		}
+		std::cout << "Check validation layer support done!" << std::endl;
 
 		return true;
 	}
@@ -462,6 +536,9 @@ private:
 	}
 
 	void Cleanup() {
+		for(auto imageView : _swapChainImageViews) {
+			vkDestroyImageView(_logicalDevice, imageView, nullptr);
+		}
 		if(enableValidationLayers) {
 			DestroyDebugUtilsMessengerEXT(_instance, _debugMessenger, nullptr);
 		}
@@ -487,6 +564,7 @@ private:
 	std::vector<VkImage> _swapChainImages;
 	VkFormat _swapChainImageFormat;
 	VkExtent2D _swapChainExtent;
+	std::vector<VkImageView> _swapChainImageViews;
 #pragma endregion
 };
 
