@@ -151,8 +151,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cfg\game.h" />
+    <ClInclude Include="cfg\gpufeatures.h" />
     <ClInclude Include="DemoApplication.h" />
-    <ClInclude Include="gamecfg.h" />
     <ClInclude Include="models\primitives\2d.h" />
     <ClInclude Include="models\primitives\3d.h" />
   </ItemGroup>

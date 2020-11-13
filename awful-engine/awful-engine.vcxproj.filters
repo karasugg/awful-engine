@@ -23,9 +23,6 @@
     <ClInclude Include="DemoApplication.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="gamecfg.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="cfg\game.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -33,6 +30,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="models\primitives\3d.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cfg\gpufeatures.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
