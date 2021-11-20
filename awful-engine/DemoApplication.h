@@ -1,4 +1,4 @@
-#pragma once
+//#pragma once
 #ifndef GLFW_INCLUDE_VULKAN
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -14,12 +14,15 @@
 #include <cstdint>
 #include <algorithm>
 #include <fstream>
+#include <string.h>
 
-#include "cfg/game.h";
-#include "cfg/gpufeatures.h";
+#include "config/config.h"
+#include "config/gpufeatures.h"
 
 #include "models/primitives/2d.h"
 #include "models/primitives/3d.h"
+
+#include <chrono>
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
@@ -73,7 +76,7 @@ private:
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-		_window = glfwCreateWindow(gamecfg::WIDTH, gamecfg::HEIGHT, gamecfg::NAME, nullptr, nullptr);
+		_window = glfwCreateWindow(config::WIDTH, config::HEIGHT, config::NAME, nullptr, nullptr);
 	}
 
 	void InitVulkan() {
@@ -86,7 +89,176 @@ private:
 		CreateImageViews();
 		CreateRenderPass();
 		CreateGraphicsPipeline();
+		CreateFramebuffers();
+		CreateCommandPool();
+		CreateCommandBuffers();
+		CreateSemaphores();
 		std::cout << "Vulkan initialization done!" << std::endl;
+	}
+
+	void DrawFrame (void) {
+		// Acquire image from the swapchain
+		uint32_t imageIndex;
+		vkAcquireNextImageKHR(_logicalDevice, _swapChain, UINT64_MAX, _imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex); // timeout is in nanoseconds, 64 bit max disables the timeout
+
+		// Submit the command buffer
+		VkSubmitInfo submitInfo{};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+		VkSemaphore waitSemaphores[] = { _imageAvailableSemaphore };
+		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+		submitInfo.waitSemaphoreCount = 1;
+		submitInfo.pWaitSemaphores = waitSemaphores;
+		submitInfo.pWaitDstStageMask = waitStages;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &_commandBuffers[imageIndex];
+
+		VkSemaphore signalSemaphores[] = { _renderFinishedSemaphore };
+		submitInfo.signalSemaphoreCount = 1;
+		submitInfo.pSignalSemaphores = signalSemaphores; // signal these semaphores once command buffer has finished execution
+		
+		if (vkQueueSubmit(_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to submit draw command buffer!");
+		}
+
+		// Handle subpass dependencies, this can be done by changing the waitStages for the imageAvailableSemaphore to VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, however.
+		VkSubpassDependency dependency{};
+		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+		dependency.dstSubpass = 0; // Must be higher than srcSubpass to avoid circular deps unless VK_SUBPASS_EXTERNAL
+
+		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.srcAccessMask = 0;
+
+		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+		VkRenderPassCreateInfo renderPassInfo{};
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		renderPassInfo.dependencyCount = 1;
+		renderPassInfo.pDependencies = &dependency;
+
+		VkPresentInfoKHR presentInfo{};
+		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores = signalSemaphores;
+		
+		VkSwapchainKHR swapChains[] = { _swapChain };
+		presentInfo.swapchainCount = 1;
+		presentInfo.pSwapchains = swapChains;
+		presentInfo.pImageIndices = &imageIndex;
+		presentInfo.pResults = nullptr; // optional using single swap chain
+
+		vkQueuePresentKHR(_graphicsQueue, &presentInfo); // Draw triangle here is everything goes smoothly
+	}
+
+	void CreateSemaphores (void) {
+		std::cout << "Creating semaphores..." << std::endl;
+		VkSemaphoreCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+		if ( vkCreateSemaphore(_logicalDevice, &createInfo, nullptr, &_imageAvailableSemaphore) || 
+		vkCreateSemaphore(_logicalDevice, &createInfo, nullptr, &_renderFinishedSemaphore) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create semaphores!");
+		}
+		std::cout << "Creating semaphores done!" << std::endl;
+	}
+
+	void CreateCommandBuffers (void) {
+		std::cout << "Creating command buffers..." << std::endl;
+		_commandBuffers.resize(_swapChainFramebuffers.size());
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.commandPool = _commandPool;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandBufferCount = (uint32_t)_commandBuffers.size();
+
+		if (vkAllocateCommandBuffers(_logicalDevice, &allocInfo,_commandBuffers.data()) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to allocate command buffers!");
+		}
+
+		// Start command buffer recoding
+		for (size_t i = 0; i < _commandBuffers.size(); i++)
+		{
+			VkCommandBufferBeginInfo beginInfo{};
+			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			beginInfo.flags = 0; // not required
+			beginInfo.pInheritanceInfo = nullptr; // not required
+
+			if (vkBeginCommandBuffer(_commandBuffers[i], &beginInfo) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to begin recording command buffer!");
+			}	
+
+			// Start render pass
+			VkRenderPassBeginInfo renderPassInfo{};
+			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			renderPassInfo.renderPass = _renderPass;
+			renderPassInfo.framebuffer = _swapChainFramebuffers[i];		
+			renderPassInfo.renderArea.offset = {0, 0};
+			renderPassInfo.renderArea.extent = _swapChainExtent;			
+			VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}}; // Color black with 100 % opacity
+			renderPassInfo.clearValueCount = 1;
+			renderPassInfo.pClearValues = &clearColor;
+			
+			vkCmdBeginRenderPass(_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+			vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline); // Bind to graphics instead of calculation pipeline
+
+			vkCmdDraw(_commandBuffers[i], 3, 1, 0, 0); // This should draw a triangle
+
+			vkCmdEndRenderPass(_commandBuffers[i]); 
+
+			if (vkEndCommandBuffer(_commandBuffers[i]) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to record command buffer!");
+			}
+		}
+
+	   std::cout << "Creating command buffers done!" << std::endl;
+
+	}
+
+	void CreateCommandPool (void) {
+		std::cout << "Creating command pool..." << std::endl;
+		QueueFamilyIndices queueFamilyIndices = 	FindQueueFamilies(_physicalDevice);
+		VkCommandPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value(); // commands for drawing
+		poolInfo.flags = 0; // not required
+
+		if (vkCreateCommandPool(_logicalDevice, &poolInfo, nullptr, &_commandPool) != VK_SUCCESS)
+		{
+			std::runtime_error("Failed to create command pool!");
+		}
+			std::cout << "Creating command pool done!" << std::endl;
+	}
+	
+	
+
+	void CreateFramebuffers() {
+		std::cout << "Creating frame buffers..." << std::endl;
+
+		_swapChainFramebuffers.resize(_swapChainImageViews.size());
+
+		for (size_t i = 0; i < _swapChainImageViews.size(); i++) {
+			VkImageView attachments[] = {
+				_swapChainImageViews[i]
+			};		
+
+			VkFramebufferCreateInfo frameBufferInfo{};
+			frameBufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			frameBufferInfo.renderPass = _renderPass;
+			frameBufferInfo.attachmentCount = 1;
+			frameBufferInfo.pAttachments = attachments;
+			frameBufferInfo.width = _swapChainExtent.width;
+			frameBufferInfo.height = _swapChainExtent.height;
+			frameBufferInfo.layers = 1;
+
+			if (vkCreateFramebuffer(_logicalDevice, &frameBufferInfo, nullptr, &_swapChainFramebuffers[i]) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed to create frame buffers!");
+			}
+		}
+		std::cout << "Creating frame buffers done!" << std::endl;
 	}
 
 	void CreateRenderPass() {
@@ -488,9 +660,13 @@ private:
 				return availablePresentMode;
 			}
 		}
-		std::cout << "Choose swap present mode done!" << std::endl;
 
-		return VK_PRESENT_MODE_FIFO_KHR;
+		std::cout << "Choose swap present mode done!" << std::endl;
+		return config::VSYNC_ENABLED ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
+		
+
+		// return VK_PRESENT_MODE_FIFO_KHR; // equals vsync
+		//return VK_PRESENT_MODE_IMMEDIATE_KHR; // disables vsync
 	}
 	// Extent stands basically for the resolution of the image
 	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
@@ -730,14 +906,15 @@ private:
 		return true;
 	}
 
-	void MainLoop() {
-		std::cout << "Entering main loop..." << std::endl;
-		while(!glfwWindowShouldClose(_window)) {
-			glfwPollEvents();
-		}
-	}
-
 	void Cleanup() {
+		
+		vkDestroySemaphore(_logicalDevice, _imageAvailableSemaphore, nullptr);
+		vkDestroySemaphore(_logicalDevice, _renderFinishedSemaphore, nullptr);
+
+		vkDestroyCommandPool(_logicalDevice, _commandPool, nullptr);
+		for (auto framebuffer : _swapChainFramebuffers) {
+			vkDestroyFramebuffer(_logicalDevice, framebuffer, nullptr);
+		}
 		vkDestroyPipeline(_logicalDevice, _graphicsPipeline, nullptr);
 		vkDestroyPipelineLayout(_logicalDevice, _pipelineLayout, nullptr);
 		vkDestroyRenderPass(_logicalDevice, _renderPass, nullptr);
@@ -754,6 +931,33 @@ private:
 		glfwDestroyWindow(_window);
 		glfwTerminate();
 	}
+
+	void MainLoop() {
+		std::cout << "Entering main loop..." << std::endl;
+		uint frameCount = 0;
+		uint totalElapsed = 0;
+		while(!glfwWindowShouldClose(_window)) {
+			glfwPollEvents();
+
+			// Fps counter
+			auto start = std::chrono::high_resolution_clock::now();
+			DrawFrame();
+			frameCount++;
+			auto elapsed = std::chrono::high_resolution_clock::now() - start;
+			totalElapsed += elapsed.count();
+			if (totalElapsed >= 1e9) {
+				std::cout << "frames drawn in one second: " << std::to_string(frameCount) << std::endl;
+				frameCount = 0;
+				totalElapsed = 0;
+			}
+
+			//std::cout << "elapsed: " << std::to_string(elapsed.count()) << std::endl;
+			//std::cout << "fps: " << std::to_string(1000000000 / elapsed.count()) << std::endl;
+
+		}
+	}
+
+	
 #pragma endregion
 
 #pragma region variable declarations
@@ -773,6 +977,15 @@ private:
 	VkRenderPass _renderPass;
 	VkPipelineLayout _pipelineLayout;
 	VkPipeline _graphicsPipeline;
+	std::vector<VkFramebuffer> _swapChainFramebuffers;
+	VkCommandPool _commandPool;
+	std::vector<VkCommandBuffer> _commandBuffers;
+
+	// Synchronization variables
+	VkSemaphore _imageAvailableSemaphore;
+	VkSemaphore _renderFinishedSemaphore;
+
+	
 
 #pragma endregion
 };

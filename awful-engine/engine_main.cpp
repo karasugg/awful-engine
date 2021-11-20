@@ -14,7 +14,8 @@
 #include <iostream>
 #include "DemoApplication.h"
 
-int main() {
+
+int main() { 
 	MainDemo();
 
 	//glfwInit();
